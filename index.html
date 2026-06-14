@@ -230,7 +230,7 @@ input[type=text]:focus{border-color:var(--gold);}
 </head>
 <body>
 
-<div class="conn"><span class="dot" id="conn-dot"></span><span id="conn-txt">לא מחובר</span></div>
+<div class="conn"><span class="dot" id="conn-dot"></span><span id="conn-txt">לא מחובר</span> <span style="opacity:.5; margin-inline-start:6px;">v7</span></div>
 <div id="glow"></div>
 <div id="host-controls">
   <button onclick="hostSkip()" title="חשיפה / השאלה הבאה">⏭️ הבא</button>
@@ -519,6 +519,15 @@ const VOTES = [
   { text: "מי הכי סביר שיהיה לו ערוץ יוטיוב עם מיליון עוקבים?",    punch: "{שם}, יש לך כבר שישה מנויים מובטחים מהכיתה." },
 ];
 
+/* הצבעות כיתתיות: כולם עונים (תלמידים/הורים/צוות), והלוח מראה איך כל קבוצה ענתה */
+const POLLS = [
+  { text: "מי הכי מתרגש לעבור לתיכון?", options: ["התלמידים","ההורים","המורים"] },
+  { text: "מה הכי ישתנה בתיכון?", options: ["יהיה קשה יותר","יהיה כיף יותר","בדיוק אותו דבר"] },
+  { text: "בתיכון, כמה זמן ייקח להתגעגע למורים מהחטיבה?", options: ["מהיום הראשון","אחרי שבוע","מה פתאום"] },
+  { text: "מה תיקחו איתכם מהחטיבה לתיכון?", options: ["החברים","הזיכרונות","שיעורי הבית"] },
+  { text: "מה הכי תזכרו מהשנים בחטיבה?", options: ["הטיולים","השיעורים","ההפסקות"] },
+];
+
 /* תמונות הווי: לוחצים על כפתור "📷 תמונות" במסך ההמתנה ובוחרים מהמחשב. זהו. */
 
 /* ============================================================
@@ -687,9 +696,10 @@ function confetti(){
 function buildProgram(){
   const prog = [];
   const inter = [];
-  const n = Math.max(PREDICTIONS.length, VOTES.length);
+  const n = Math.max(PREDICTIONS.length, VOTES.length, POLLS.length);
   for (let i = 0; i < n; i++){
     if (PREDICTIONS[i]) inter.push({ k:'pred', p: PREDICTIONS[i] });
+    if (POLLS[i])       inter.push({ k:'poll', poll: POLLS[i] });
     if (VOTES[i])       inter.push({ k:'vote', v: VOTES[i] });
   }
   let ii = 0;
@@ -779,6 +789,13 @@ function hostOnMessage(m){
       if (Object.keys(answers).length >= Object.keys(players).length) setTimeout(revealVote, 700);
     }
   }
+  if (m.t === 'pollans' && m.i === seq && !revealed && curItem && curItem.k === 'poll'){
+    if (players[m.id] && !answers[m.id]){
+      answers[m.id] = { picks: m.picks || [] };
+      $('hv-answered').textContent = Object.keys(answers).length;
+      if (Object.keys(answers).length >= Object.keys(players).length) setTimeout(revealPoll, 700);
+    }
+  }
 }
 
 function renderLobbyChips(){
@@ -813,6 +830,7 @@ function hostSkip(){
   // אם אנחנו בתוך שאלה/הצבעה שעוד פתוחה, חושפים; אחרת עוברים הלאה
   if (curItem && curItem.k === 'q' && !revealed){ revealQ(); return; }
   if (curItem && curItem.k === 'vote' && !revealed){ revealVote(); return; }
+  if (curItem && curItem.k === 'poll' && !revealed){ revealPoll(); return; }
   nextItem();
 }
 function hostJumpSummary(){
@@ -843,6 +861,7 @@ function nextItem(){
   if (curItem.k === 'q')    showQuestion(curItem.q);
   if (curItem.k === 'pred') showPrediction(curItem.p);
   if (curItem.k === 'vote') showVote(curItem.v);
+  if (curItem.k === 'poll') showPoll(curItem.poll);
 }
 
 /* צבעי נושא מתחלפים בין שאלות, נגד מונוטוניות */
@@ -1095,6 +1114,87 @@ function revealVote(){
   });
   show('hvr');
   confetti();
+}
+
+/* ---------- הצבעה כיתתית (כולם עונים, פילוח לפי קבוצה) ---------- */
+let curPollOptions = [];
+function showPoll(poll){
+  seq++;
+  answers = {}; revealed = false;
+  curPollOptions = poll.options.slice();
+
+  $('hv-text').textContent = poll.text;
+  enterStatement($('hv-text'));
+  rotateTheme();
+  $('hv-answered').textContent = '0';
+  $('hv-total').textContent = Object.keys(players).length;
+  timeLeft = VOTE_SECONDS;
+  $('hv-timer').textContent = timeLeft;
+  $('hv-timer').classList.remove('low');
+  animateBar($('hv-bar'), VOTE_SECONDS);
+  show('hv');
+  send({ t:'pollq', i:seq, text:poll.text, dur:VOTE_SECONDS, options:curPollOptions });
+  clearInterval(hostTimer);
+  hostTimer = setInterval(() => {
+    timeLeft--;
+    $('hv-timer').textContent = Math.max(0,timeLeft);
+    if (timeLeft <= 5) $('hv-timer').classList.add('low');
+    if (timeLeft <= 0) revealPoll();
+  }, 1000);
+}
+
+function revealPoll(){
+  if (revealed) return;
+  revealed = true;
+  clearInterval(hostTimer);
+  const poll = curItem.poll;
+
+  // ספירה לפי קבוצה: { s:{opt:count}, p:{...}, t:{...} }
+  const byTeam = { s:{}, p:{}, t:{} };
+  ['s','p','t'].forEach(tm => curPollOptions.forEach(o => byTeam[tm][o] = 0));
+  Object.entries(answers).forEach(([id, a]) => {
+    const tm = players[id] ? players[id].team : null;
+    if (!tm || !byTeam[tm]) return;
+    a.picks.forEach(o => { if (o in byTeam[tm]) byTeam[tm][o]++; });
+  });
+
+  // התשובה המובילה בכל קבוצה
+  function topOf(tm){
+    let max = Math.max(0, ...Object.values(byTeam[tm]));
+    if (max === 0) return null;
+    const lead = curPollOptions.filter(o => byTeam[tm][o] === max);
+    return lead[0];
+  }
+
+  send({ t:'pollrev', q:poll.text });
+
+  $('hvr-q').textContent = poll.text;
+  $('hvr-winner').textContent = '🎭 מה ענתה כל קבוצה';
+  $('hvr-punch').textContent = '';
+  const box = $('hvr-bars'); box.innerHTML = '';
+
+  const TEAMS = [['s','🎒 תלמידים'], ['p','👨‍👩‍👧 הורים'], ['t','🍎 צוות']];
+  TEAMS.forEach(([tm, label]) => {
+    const members = Object.values(players).filter(p => p.team === tm).length;
+    if (!members) return;
+    const top = topOf(tm);
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'margin-bottom:18px;';
+    const head = document.createElement('div');
+    head.style.cssText = 'font-weight:900; font-size:20px; margin-bottom:6px; color:var(--gold);';
+    head.textContent = label + (top ? ' → ' + top : ' (לא הצביעו)');
+    wrap.appendChild(head);
+    const denom = Math.max(1, ...curPollOptions.map(o => byTeam[tm][o]));
+    curPollOptions.forEach(o => {
+      const row = document.createElement('div');
+      row.className = 'bar' + (o === top ? ' is-correct' : '');
+      row.innerHTML = '<span class="name">' + o + '</span><span class="track"><span class="fill"></span></span><span class="n">' + byTeam[tm][o] + '</span>';
+      wrap.appendChild(row);
+      requestAnimationFrame(() => { row.querySelector('.fill').style.width = (byTeam[tm][o]/denom*100) + '%'; });
+    });
+    box.appendChild(wrap);
+  });
+  show('hvr');
 }
 
 /* ---------- סיכום הערב ---------- */
@@ -1363,8 +1463,10 @@ function playerOnMessage(m){
   if (!joined) return;
   if (m.t === 'q')    showPlayerRound(m, false);
   if (m.t === 'vq')   showPlayerRound(m, true);
+  if (m.t === 'pollq') showPlayerPoll(m);
   if (m.t === 'rev' && m.i === curQ?.i) showFeedback(m);
   if (m.t === 'vrev') showVoteResult(m);
+  if (m.t === 'pollrev') showPollWait(m);
   if (m.t === 'look') show('plook');
   if (m.t === 'end')  showFinal(m);
 }
@@ -1454,6 +1556,48 @@ function showVoteResult(m){
   $('pvr-q').textContent = m.q;
   $('pvr-winner').textContent = '🏆 ' + m.winner;
   $('pvr-punch').textContent = m.punch;
+  show('pvr');
+}
+
+function showPlayerPoll(m){
+  curQ = m; picks = new Set(); sentThisQ = false; qShownAt = Date.now();
+  $('pq-text').textContent = '🎭 ' + m.text;
+  const hint = $('pq-hint');
+  hint.textContent = '🎭 בכיף! בחרו תשובה, ונראה מה ענתה כל קבוצה 😄';
+  hint.style.cssText = 'font-size:16px; color:#fff; font-weight:700; margin:0 0 14px; background:var(--violet); border-radius:12px; padding:10px 14px;';
+  const grid = $('pq-grid'); grid.innerHTML = '';
+  m.options.forEach(n => {
+    const b = document.createElement('button');
+    b.className = 'pbtn'; b.textContent = n;
+    b.onclick = () => {
+      if (sentThisQ) return;
+      picks = new Set([n]);
+      b.classList.add('sel');
+      sentThisQ = true;
+      clearTimeout(pTimerTO);
+      send({ t:'pollans', id:myId, i:curQ.i, picks:[...picks] });
+      $('psent-title').textContent = 'ההצבעה נקלטה!';
+      show('psent');
+    };
+    grid.appendChild(b);
+  });
+  $('p-submit').style.display = 'none';
+  animateBar($('pq-bar'), m.dur);
+  clearTimeout(pTimerTO);
+  pTimerTO = setTimeout(() => {
+    if (!sentThisQ){
+      sentThisQ = true;
+      $('pq-grid').querySelectorAll('button').forEach(b => b.disabled = true);
+      $('pq-hint').textContent = '⌛ הזמן נגמר, תכף התוצאות';
+    }
+  }, m.dur*1000);
+  show('pq');
+}
+
+function showPollWait(m){
+  $('pvr-q').textContent = m.q;
+  $('pvr-winner').textContent = '🎭 תראו על המסך הגדול!';
+  $('pvr-punch').textContent = 'מה ענתה כל קבוצה — תלמידים, הורים וצוות 😄';
   show('pvr');
 }
 
