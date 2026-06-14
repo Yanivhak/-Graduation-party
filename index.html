@@ -106,6 +106,12 @@ input[type=text]:focus{border-color:var(--gold);}
 #glow{position:fixed; inset:0; z-index:1; pointer-events:none; opacity:.55;
   background:radial-gradient(820px 480px at 18% 108%, color-mix(in srgb, var(--acc) 26%, transparent), transparent 70%);
   transition:opacity 1s ease;}
+#host-controls{position:fixed; bottom:14px; right:14px; z-index:80; display:none; gap:8px;}
+#host-controls.on{display:flex;}
+#host-controls button{font-family:'Heebo'; font-size:14px; font-weight:700; color:var(--ink);
+  background:rgba(34,50,92,.92); border:1px solid rgba(255,255,255,.22); border-radius:10px;
+  padding:9px 14px; cursor:pointer; backdrop-filter:blur(4px);}
+#host-controls button:active{transform:translateY(1px);}
 .answeredline{font-size:20px; color:var(--ink-dim);}
 .answeredline b{color:var(--teal); font-size:26px;}
 .tbar{width:min(720px,90vw); height:10px; border-radius:5px; background:rgba(255,255,255,.12); overflow:hidden; margin-top:20px;}
@@ -220,6 +226,11 @@ input[type=text]:focus{border-color:var(--gold);}
 
 <div class="conn"><span class="dot" id="conn-dot"></span><span id="conn-txt">לא מחובר</span></div>
 <div id="glow"></div>
+<div id="host-controls">
+  <button onclick="hostSkip()" title="חשיפה / השאלה הבאה">⏭️ הבא</button>
+  <button onclick="hostJumpSummary()" title="קפיצה לסיכום">📊 סיכום</button>
+  <button onclick="hostJumpMontage()" title="קפיצה למונטאז'">🎞️ תמונות</button>
+</div>
 <div class="bgshow" id="bgshow"><img id="bgA"><img id="bgB"></div>
 <div id="fw"><div class="fwtext" id="fw-text"></div></div>
 
@@ -245,7 +256,7 @@ input[type=text]:focus{border-color:var(--gold);}
       <button class="btn ghost" id="copy-link" style="margin-top:10px; font-size:15px; padding:10px 22px; display:none" onclick="copyJoinLink()">🔗 העתקת קישור הצטרפות</button>
     </div>
     <div>
-      <p style="font-size:19px; color:var(--ink-dim); max-width:300px;">סרקו את הקוד או היכנסו לכתובת, בחרו צד (תלמידים או הורים), ותופיעו כאן 👇</p>
+      <p style="font-size:19px; color:var(--ink-dim); max-width:300px;">סרקו את הקוד או היכנסו לכתובת, בחרו צד (תלמידים / הורים / צוות), ותופיעו כאן 👇</p>
       <p style="font-size:18px;">מחוברים: <span class="count" id="p-count">0</span></p>
     </div>
   </div>
@@ -253,11 +264,14 @@ input[type=text]:focus{border-color:var(--gold);}
   <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center;">
     <button class="btn" id="start-btn" onclick="startGame()" disabled>⏳ ממתינים לשחקן ראשון...</button>
     <button class="btn ghost" id="pics-btn" onclick="$('pics-input').click()">📷 תמונות</button>
-    <button class="btn ghost" id="music-btn" onclick="$('music-input').click()">🎵 מוזיקה</button>
+    <button class="btn ghost" id="gamemusic-btn" onclick="$('gamemusic-input').click()">🎵 מוזיקת רקע למשחק</button>
+    <button class="btn ghost" id="music-btn" onclick="$('music-input').click()">🎬 מוזיקת מונטאז'</button>
   </div>
   <input type="file" id="pics-input" accept="image/*" multiple style="display:none" onchange="picsChosen(this.files)">
-  <input type="file" id="music-input" accept="audio/*" style="display:none" onchange="musicChosen(this.files)">
-  <div id="music-list" style="display:flex; flex-direction:column; gap:6px; margin-top:12px; font-size:15px;"></div>
+  <input type="file" id="gamemusic-input" accept="audio/*" multiple style="display:none" onchange="gameMusicChosen(this.files)">
+  <input type="file" id="music-input" accept="audio/*" multiple style="display:none" onchange="musicChosen(this.files)">
+  <div id="gamemusic-list" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; font-size:14px;"></div>
+  <div id="music-list" style="display:flex; flex-direction:column; gap:6px; margin-top:8px; font-size:14px;"></div>
   <p style="font-size:13px; color:var(--ink-dim); margin-top:12px;">📷 התמונות מוצגות מהמחשב הזה בלבד ואינן עולות לרשת</p>
 </div>
 
@@ -298,7 +312,7 @@ input[type=text]:focus{border-color:var(--gold);}
 <!-- ===================== HOST: VOTE QUESTION ===================== -->
 <div class="screen" id="hv">
   <div class="qhead">
-    <span class="vote-tag">🗳️ הצבעת קהל · בלי נקודות</span>
+    <span class="vote-tag">🎭 רק בכיף · הצבעת קהל בלי נקודות</span>
     <div class="timerball" id="hv-timer">20</div>
   </div>
   <div class="statement" id="hv-text"></div>
@@ -354,6 +368,7 @@ input[type=text]:focus{border-color:var(--gold);}
   <div class="teampick">
     <button class="pbtn" id="team-s" onclick="pickTeam('s')">🎒 תלמידים</button>
     <button class="pbtn" id="team-p" onclick="pickTeam('p')">👨‍👩‍👧 הורים</button>
+    <button class="pbtn" id="team-t" onclick="pickTeam('t')">🍎 צוות</button>
   </div>
   <button class="btn" onclick="joinGame()">כניסה 🚀</button>
   <p id="j-msg" style="color:var(--coral); min-height:24px; font-weight:500;"></p>
@@ -442,47 +457,31 @@ const GRADUATES = ["אהוד","בן","עמית","גלעד","רועי","מקס"];
 /* כל שאלה: text = המשפט, answer = רשימת שמות (אחד או יותר, בדיוק כמו ב-PEOPLE).
    אפשר להוסיף double:true לשאלה ששווה ניקוד כפול. כדי להוסיף שאלה, פשוט מוסיפים שורה. */
 const QUESTIONS = [
-  { text: "איש הים", answer: ["עפרי"] },
   { text: "נער הפלא", answer: ["גלעד"] },
-  { text: "התלמיד הכי טוב בהיסטוריה ובפוליטיקה", answer: ["רועי"] },
   { text: "רוצה להיות המאבטח של מופע הסיום", answer: ["עמית"] },
   { text: "עושה תערוכות", answer: ["מקס"] },
-  { text: "זכה בהמון גביעים ומדליות בתחרויות ספורט שונות", answer: ["בן"] },
   { text: "מעצב גרפי", answer: ["אהוד"] },
+  { text: "אלוף הכיתה בידע עולם", answer: ["רועי"] },
+  { text: "זכה בהמון גביעים ומדליות בתחרויות ספורט שונות", answer: ["בן"] },
   { text: "מי הם ״השפנס״?", answer: ["גלעד","מקס"] },
   { text: "יוצאים לשילוב במתמטיקה", answer: ["בן","רועי"] },
-  { text: "מלמד על קשת המזון", answer: ["יניב"] },
   { text: "אוהב ללבוש קפוצ'ון", answer: ["עמית"] },
-  { text: "אבא שלו מנהל חנות משקאות ״אליעזר״, על שם סבא אליעזר ז״ל", answer: ["גלעד"] },
-  { text: "אמא שלו חברה של שוני מקופה ראשית", answer: ["אהוד"] },
-  { text: "אוכל חצילים בארוחת בוקר", answer: ["בן"] },
-  { text: "הצטרף אלינו רק השנה, וכבר אי אפשר לדמיין את הכיתה בלעדיו", answer: ["רועי"] },
-  { text: "יודע לבנות הרבה דברים", answer: ["מקס"] },
-  { text: "אוהבים את הסדרה ״רמזור״", answer: ["עדי","גלעד"] },
-  { text: "התחפש בפורים לשוטר", answer: ["עמית"] },
-  { text: "מזהה פונטים בשלטי חוצות במהירות האור", answer: ["אהוד"] },
-  { text: "מי אמר: ״הייתי ילד ביישן, ובמסיבת הסיום שלי רקדתי״", answer: ["עפרי"] },
-  { text: "אוהב לרדת על משחקי דרגון בול", answer: ["בן"] },
-  { text: "אלוף הכיתה בידע עולם", answer: ["רועי"] },
-  { text: "אוהב קפה מוקה ושוקו", answer: ["מקס"] },
-  { text: "מנצח בטאקי", answer: ["עמית"] },
   { text: "התלמידים שהגיעו מבית ספר אוסישקין", answer: ["גלעד","בן","אהוד"] },
   { text: "מתמצא בהיסטוריה של אירופה", answer: ["רועי"] },
-  { text: "מי אמר: ״אני מעדיף לאכול את הפסטה שרימפס של מקסימיליאן מאשר לרקוד״", answer: ["גלעד"] },
-  { text: "יכול לזהות מדינה לפי הדגל שלה מהר יותר מווייז", answer: ["אהוד"] },
-  { text: "יודע לשחק במשחקי מחשב", answer: ["בן"] },
-  { text: "אוהב זמר בשם כריס", answer: ["עמית"] },
-  { text: "דומה באופי לאחד התלמידים שלה", answer: ["עדי"] },
   { text: "המציאו מאכל בשם פיצ'דר", answer: ["מקס","גלעד"] },
-  { text: "אוהב ספורט: כדורסל, מכון כושר, והכול שביניהם", answer: ["רועי"] },
-  { text: "יודע סינית", answer: ["עפרי"] },
+  { text: "אוכל חצילים בארוחת בוקר", answer: ["בן"] },
+  { text: "אוהב זמר בשם כריס", answer: ["עמית"] },
+  { text: "אוהב קפה מוקה ושוקו", answer: ["מקס"] },
+  { text: "מי אמר: ״אני מעדיף לאכול את הפסטה שרימפס של מקסימיליאן מאשר לרקוד״", answer: ["גלעד"] },
+  { text: "הצטרף אלינו רק השנה, וכבר אי אפשר לדמיין את הכיתה בלעדיו", answer: ["רועי"] },
   { text: "אוהב נוסטלגיה מאז 2010", answer: ["אהוד"] },
-  { text: "אוהבים לשחק שחמט", answer: ["בן","רועי"] },
-  { text: "מעולה בדרגון בול", answer: ["גלעד"] },
-  { text: "אוהב טלפונים", answer: ["עמית"] },
+  { text: "אוהב לרדת על משחקי דרגון בול", answer: ["בן"] },
+  { text: "יודע לבנות הרבה דברים", answer: ["מקס"] },
+  { text: "אבא שלו מנהל חנות משקאות ״אליעזר״, על שם סבא אליעזר ז״ל", answer: ["גלעד"] },
   { text: "עוד נראה אותו יום אחד דיפלומט באו״ם", answer: ["רועי"] },
-  { text: "שני חברים בקבוצת ״קציצת הסרטן״", answer: ["מקס","גלעד"] },
-  { text: "יודע לבנות מצגות מעולות", answer: ["אהוד"] },
+  { text: "מנצח בטאקי", answer: ["עמית"] },
+  { text: "יכול לזהות מדינה לפי הדגל שלה מהר יותר מווייז", answer: ["אהוד"] },
+  { text: "אוהבים לשחק שחמט", answer: ["בן","רועי"] },
   { text: "אמא של מי אומרת: ״רגע, שניה, תיכף, עוד מעט״", answer: ["מקס"], double: true },
 ];
 
@@ -574,7 +573,12 @@ function connectPlayer(code, onReady){
 function send(obj){
   obj.from = myId;
   obj.ts = Date.now();
-  if (msgRef) msgRef.push(obj);
+  if (msgRef){
+    msgRef.push(obj).catch((e) => {
+      console.error('Firebase write failed:', e && e.message);
+      alert('שגיאה בשליחה לשרת: ' + (e && e.message ? e.message : 'לא ידוע') + '\n(ייתכן שכללי האבטחה של מסד הנתונים חוסמים. צריך test mode.)');
+    });
+  }
 }
 
 function show(id){
@@ -584,8 +588,8 @@ function show(id){
 }
 const $ = id => document.getElementById(id);
 const sameSet = (a,b) => a.length===b.length && [...a].sort().join('|')===[...b].sort().join('|');
-const TEAM_NAME = { s:'תלמידים', p:'הורים' };
-const TEAM_EMOJI = { s:'🎒', p:'👨‍👩‍👧' };
+const TEAM_NAME = { s:'תלמידים', p:'הורים', t:'צוות' };
+const TEAM_EMOJI = { s:'🎒', p:'👨‍👩‍👧', t:'🍎' };
 
 /* ============================================================
    תמונות הווי
@@ -698,7 +702,7 @@ let qCount = 0;              // כמה שאלות ניקוד כבר היו
 let bestMs = Infinity, bestName = '';
 let maxStreak = 0, streakKing = '';
 let confusion = {};          // "שםא|שםב" -> count
-let teamCorrect = { s:0, p:0 };
+let teamCorrect = { s:0, p:0, t:0 };
 let voteWinners = [];
 let curVoteOptions = [];
 
@@ -743,7 +747,7 @@ function hostOnMessage(m){
       const names = Object.values(players).map(p=>p.name);
       let final = name, k = 2;
       while (names.includes(final)) final = name + ' ' + (k++);
-      players[m.id] = { name: final, team: (m.team === 'p' ? 'p' : 's'), score: 0, streak: 0, correct: 0 };
+      players[m.id] = { name: final, team: (['s','p','t'].includes(m.team) ? m.team : 's'), score: 0, streak: 0, correct: 0 };
       renderLobbyChips();
     }
     send({ t:'lobby', players: Object.entries(players).map(([id,p]) => ({id, name:p.name})) });
@@ -784,9 +788,28 @@ function renderLobbyChips(){
 
 function startGame(){
   stopLobbyBg();
+  $('host-controls').classList.add('on');
+  playGameMusic();
   program = buildProgram();
   itemIndex = -1;
   nextItem();
+}
+
+/* כפתורי שליטה של המורה */
+function hostSkip(){
+  // אם אנחנו בתוך שאלה/הצבעה שעוד פתוחה, חושפים; אחרת עוברים הלאה
+  if (curItem && curItem.k === 'q' && !revealed){ revealQ(); return; }
+  if (curItem && curItem.k === 'vote' && !revealed){ revealVote(); return; }
+  nextItem();
+}
+function hostJumpSummary(){
+  clearInterval(hostTimer);
+  showSummary();
+}
+function hostJumpMontage(){
+  clearInterval(hostTimer);
+  if (havai.length){ startMontage(); }
+  else { alert('עוד לא נטענו תמונות. אפשר לטעון אותן בכפתור 📷 במסך ההמתנה.'); }
 }
 
 function nextItem(){
@@ -952,13 +975,17 @@ function addBanner(box, cls, text){
 }
 
 function teamBattleLine(){
-  const members = { s:0, p:0 };
+  const members = { s:0, p:0, t:0 };
   Object.values(players).forEach(p => members[p.team]++);
-  if (!members.s || !members.p || !qCount) return '';
-  const pct = t => Math.round(teamCorrect[t] / (members[t]*qCount) * 100);
-  const ps = pct('s'), pp = pct('p');
-  const lead = ps === pp ? '🤝 תיקו!' : (ps > pp ? '🎒 התלמידים מובילים!' : '👨‍👩‍👧 ההורים מובילים!');
-  return '⚔️ תלמידים ' + ps + '% · הורים ' + pp + '% · ' + lead;
+  if (!qCount) return '';
+  const active = ['s','p','t'].filter(k => members[k] > 0);
+  if (active.length < 2) return ''; // צריך לפחות שתי קבוצות לקרב
+  const pct = k => Math.round(teamCorrect[k] / (members[k]*qCount) * 100);
+  const parts = active.map(k => TEAM_EMOJI[k] + ' ' + TEAM_NAME[k] + ' ' + pct(k) + '%');
+  const best = Math.max(...active.map(pct));
+  const leaders = active.filter(k => pct(k) === best);
+  const lead = leaders.length > 1 ? '🤝 צמודים!' : (TEAM_EMOJI[leaders[0]] + ' ' + TEAM_NAME[leaders[0]] + ' מובילים!');
+  return '⚔️ ' + parts.join(' · ') + ' · ' + lead;
 }
 
 /* ---------- תחזית 2036 ---------- */
@@ -1065,12 +1092,15 @@ function showSummary(){
   }
   const battle = teamBattleLine();
   if (battle){
-    const members = { s:0, p:0 };
+    const members = { s:0, p:0, t:0 };
     Object.values(players).forEach(p => members[p.team]++);
-    const pct = t => Math.round(teamCorrect[t] / (members[t]*qCount) * 100);
-    const ps = pct('s'), pp = pct('p');
-    const verdict = ps === pp ? 'תיקו מכובד 🤝' : (ps > pp ? 'התלמידים ניצחו! 🎒' : 'ההורים ניצחו! 👨‍👩‍👧');
-    sumCard(grid, '⚔️', 'תלמידים נגד הורים', verdict, 'תלמידים ' + ps + '% · הורים ' + pp + '%');
+    const active = ['s','p','t'].filter(k => members[k] > 0);
+    const pct = k => Math.round(teamCorrect[k] / (members[k]*qCount) * 100);
+    const best = Math.max(...active.map(pct));
+    const leaders = active.filter(k => pct(k) === best);
+    const verdict = leaders.length > 1 ? 'תיקו צמוד 🤝' : (TEAM_NAME[leaders[0]] + ' ניצחו! ' + TEAM_EMOJI[leaders[0]]);
+    const detail = active.map(k => TEAM_NAME[k] + ' ' + pct(k) + '%').join(' · ');
+    sumCard(grid, '⚔️', 'קרב הקבוצות', verdict, detail);
   }
   const parents = Object.values(players).filter(p => p.team === 'p');
   if (parents.length){
@@ -1139,7 +1169,7 @@ function renderMusicList(){
     row.appendChild(txt); row.appendChild(x);
     box.appendChild(row);
   });
-  $('music-btn').textContent = playlist.length ? '🎵 הוספת שיר נוסף' : '🎵 מוזיקה';
+  $('music-btn').textContent = playlist.length ? "🎬 הוספת שיר למונטאז'" : "🎬 מוזיקת מונטאז'";
 }
 function playPlaylist(){
   if (!playlist.length) return;
@@ -1149,8 +1179,52 @@ function playPlaylist(){
   montageAudio.play().catch(()=>{});
 }
 
+/* ---------- מוזיקת רקע למשחק (נפרדת מהמונטאז') ---------- */
+let gamePlaylist = [], gamePlayIdx = 0, gameAudio = null;
+function gameMusicChosen(files){
+  if (!files || !files.length) return;
+  [...files].forEach(f => gamePlaylist.push({ name: f.name, url: URL.createObjectURL(f) }));
+  $('gamemusic-input').value = '';
+  renderGameMusicList();
+}
+function removeGameSong(i){
+  URL.revokeObjectURL(gamePlaylist[i].url);
+  gamePlaylist.splice(i, 1);
+  renderGameMusicList();
+}
+function renderGameMusicList(){
+  const box = $('gamemusic-list');
+  box.innerHTML = '';
+  gamePlaylist.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; align-items:center; gap:10px; justify-content:center;';
+    const txt = document.createElement('span');
+    txt.textContent = '🎵 ' + (i+1) + '. ' + s.name;
+    const x = document.createElement('button');
+    x.textContent = '✕'; x.title = 'הסרת השיר';
+    x.style.cssText = 'background:none; border:1px solid rgba(255,255,255,.3); color:var(--coral); border-radius:50%; width:24px; height:24px; cursor:pointer; font-size:13px; line-height:1;';
+    x.onclick = () => removeGameSong(i);
+    row.appendChild(txt); row.appendChild(x);
+    box.appendChild(row);
+  });
+  $('gamemusic-btn').textContent = gamePlaylist.length ? '🎵 הוספת שיר רקע' : '🎵 מוזיקת רקע למשחק';
+}
+function playGameMusic(){
+  if (!gamePlaylist.length) return;
+  if (gameAudio){ gameAudio.pause(); }
+  gameAudio = new Audio(gamePlaylist[gamePlayIdx % gamePlaylist.length].url);
+  gameAudio.volume = 0.18; // עוצמה נמוכה כדי לא להפריע
+  gameAudio.onended = () => { gamePlayIdx++; playGameMusic(); };
+  gameAudio.play().catch(()=>{});
+}
+function stopGameMusic(){
+  if (gameAudio){ try{ gameAudio.pause(); }catch(e){} }
+}
+
 let monIv = null;
 function startMontage(){
+  $('host-controls').classList.remove('on');
+  stopGameMusic();
   show('montage');
   playIdx = 0;
   playPlaylist();
@@ -1178,6 +1252,7 @@ function pickTeam(t){
   myTeam = t;
   $('team-s').classList.toggle('sel', t === 's');
   $('team-p').classList.toggle('sel', t === 'p');
+  $('team-t').classList.toggle('sel', t === 't');
 }
 
 function joinGame(){
@@ -1185,7 +1260,7 @@ function joinGame(){
   myName = $('j-name').value.trim();
   if (!/^\d{4}$/.test(code)){ $('j-msg').textContent = 'הקוד הוא 4 ספרות (מופיע על הלוח)'; return; }
   if (!myName){ $('j-msg').textContent = 'איך קוראים לך? 🙂'; return; }
-  if (!myTeam){ $('j-msg').textContent = 'בחרו צד: תלמידים או הורים 🙂'; return; }
+  if (!myTeam){ $('j-msg').textContent = 'בחרו צד: תלמידים / הורים / צוות 🙂'; return; }
   $('j-msg').textContent = 'מתחברים...'; $('j-msg').style.color = 'var(--ink-dim)';
   role = 'player';
   connectPlayer(code, () => {
@@ -1219,9 +1294,9 @@ function playerOnMessage(m){
 
 function showPlayerRound(m, isVote){
   curQ = m; picks = new Set(); sentThisQ = false; qShownAt = Date.now();
-  $('pq-text').textContent = (isVote ? '🗳️ ' : '') + m.text;
+  $('pq-text').textContent = (isVote ? '🎭 ' : '') + m.text;
   $('pq-hint').textContent = isVote
-    ? 'הצבעת קהל! בלי נקודות, רק כבוד 😄'
+    ? 'רק בכיף! זו לא שאלה אמיתית, פשוט הצבעה מצחיקה בלי נקודות 😄'
     : (m.multi ? 'יש כאן יותר מתשובה אחת, סמנו את כולן ולחצו שליחה' : 'לחיצה אחת = תשובה. מהירות שווה נקודות!') + (m.double ? ' ✨ שאלה כפולה!' : '');
   const opts = isVote ? m.options : m.people;
   const grid = $('pq-grid'); grid.innerHTML = '';
