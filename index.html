@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>מי הדמות? · מסיבת סיום</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -500,57 +503,77 @@ const VOTES = [
 /* ============================================================
    תקשורת (MQTT דרך ברוקר ציבורי חינמי), אין צורך לגעת
    ============================================================ */
-const BROKERS = ["wss://test.mosquitto.org:8081/mqtt"];
+const BROKERS = ["wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
 const NS = "yk-siyum-2026";
 let client = null, topic = null, myId = Math.random().toString(36).slice(2,10);
-let role = null;
+let role = null, chosenBroker = 0;
 
 function setConn(on){
   document.getElementById('conn-dot').classList.toggle('on', on);
   document.getElementById('conn-txt').textContent = on ? 'מחובר' : 'לא מחובר';
 }
 
-function connect(room, onReady){
-  topic = NS + "/" + room;
+// קוד החדר = ספרת שרת (אינדקס ב-BROKERS) + 3 ספרות אקראיות. כך התלמיד יודע לאיזה שרת להתחבר.
+function makeRoomCode(brokerIndex){
+  return String(brokerIndex) + String(Math.floor(100 + Math.random()*900));
+}
+function brokerFromCode(code){
+  const idx = parseInt(code[0], 10);
+  return (idx >= 0 && idx < BROKERS.length) ? idx : 0;
+}
+
+// מצב מורה: מנסה את כל השרתים במקביל, מתחבר לראשון שעונה, ומחזיר את האינדקס שלו
+function connectHost(onReady){
   let settled = false;
   const candidates = [];
+  function cleanupLosers(winner){ candidates.forEach(c => { if (c !== winner){ try{ c.end(true); }catch(e){} } }); }
 
-  function cleanupLosers(winner){
-    candidates.forEach(c => { if (c !== winner){ try{ c.end(true); }catch(e){} } });
-  }
-
-  BROKERS.forEach(url => {
+  BROKERS.forEach((url, idx) => {
     let c;
-    try {
-      c = mqtt.connect(url, { clientId: 'c_'+myId+'_'+Math.random().toString(36).slice(2,6), clean: true, connectTimeout: 20000, reconnectPeriod: 3000, keepalive: 30 });
-    } catch(e){ return; }
+    try { c = mqtt.connect(url, { clientId:'h_'+myId+'_'+Math.random().toString(36).slice(2,6), clean:true, connectTimeout:20000, reconnectPeriod:3000, keepalive:30 }); }
+    catch(e){ return; }
     candidates.push(c);
     c.on('connect', () => {
       if (!settled){
         settled = true;
         client = c;
+        chosenBroker = idx;
         cleanupLosers(c);
-        c.subscribe(topic, {qos:1}, () => { setConn(true); if (onReady){ onReady(); onReady = null; } });
-      } else if (c === client){
-        setConn(true);
-      }
+        const room = makeRoomCode(idx);
+        topic = NS + "/" + room;
+        c.subscribe(topic, {qos:1}, () => { setConn(true); onReady(room); });
+        attachMessageHandler(c);
+      } else if (c === client){ setConn(true); }
     });
     c.on('close', () => { if (c === client) setConn(false); });
     c.on('error', () => {});
-    c.on('message', (t, payload) => {
-      let m; try{ m = JSON.parse(payload.toString()); }catch(e){ return; }
-      if (m.from === myId) return;
-      if (role === 'host') hostOnMessage(m);
-      else playerOnMessage(m);
-    });
   });
 
-  // אם אחרי 22 שניות אף שרת לא ענה, מודיעים
-  setTimeout(() => {
-    if (!settled){
-      alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו שוב, או נסו רשת אחרת.');
-    }
-  }, 22000);
+  setTimeout(() => { if (!settled){ alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו רשת אחרת.'); } }, 22000);
+}
+
+// מצב תלמיד/הורה: מתחבר רק לשרת שהמורה בחר (לפי הספרה הראשונה בקוד)
+function connectPlayer(code, onReady){
+  const idx = brokerFromCode(code);
+  topic = NS + "/" + code;
+  let settled = false;
+  const c = mqtt.connect(BROKERS[idx], { clientId:'p_'+myId+'_'+Math.random().toString(36).slice(2,6), clean:true, connectTimeout:20000, reconnectPeriod:3000, keepalive:30 });
+  c.on('connect', () => {
+    if (!settled){ settled = true; client = c; c.subscribe(topic, {qos:1}, () => { setConn(true); onReady(); }); attachMessageHandler(c); }
+    else setConn(true);
+  });
+  c.on('close', () => setConn(false));
+  c.on('error', () => {});
+  setTimeout(() => { if (!settled){ alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו שוב.'); } }, 22000);
+}
+
+function attachMessageHandler(c){
+  c.on('message', (t, payload) => {
+    let m; try{ m = JSON.parse(payload.toString()); }catch(e){ return; }
+    if (m.from === myId) return;
+    if (role === 'host') hostOnMessage(m);
+    else playerOnMessage(m);
+  });
 }
 
 function send(obj){
@@ -685,23 +708,24 @@ let curVoteOptions = [];
 
 function startHost(){
   role = 'host';
-  const room = String(Math.floor(1000 + Math.random()*9000));
-  // מציגים את הלובי מיד, בלי לחכות לשרת
-  $('room-code').textContent = room;
-  const url = location.origin.startsWith('http')
-    ? location.origin + location.pathname + '?room=' + room
-    : '';
-  if (url){
-    joinLink = url;
-    $('qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=2&data=' + encodeURIComponent(url);
-    $('join-url').textContent = url.replace(/^https?:\/\//,'');
-    $('copy-link').style.display = '';
-  } else {
-    document.querySelector('.qrbox').style.display = 'none';
-    $('join-url').textContent = 'פתחו את הקובץ במכשיר אחר והקלידו את הקוד';
-  }
   show('lobby');
-  connect(room);
+  $('room-code').textContent = '····';
+  $('join-url').textContent = 'מתחבר לשרת...';
+  connectHost((room) => {
+    $('room-code').textContent = room;
+    const url = location.origin.startsWith('http')
+      ? location.origin + location.pathname + '?room=' + room
+      : '';
+    if (url){
+      joinLink = url;
+      $('qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=2&data=' + encodeURIComponent(url);
+      $('join-url').textContent = url.replace(/^https?:\/\//,'');
+      $('copy-link').style.display = '';
+    } else {
+      document.querySelector('.qrbox').style.display = 'none';
+      $('join-url').textContent = 'פתחו את הקובץ במכשיר אחר והקלידו את הקוד';
+    }
+  });
   window.onbeforeunload = () => 'המשחק פעיל, רענון ינתק את כולם.';
 }
 
@@ -1168,7 +1192,7 @@ function joinGame(){
   if (!myTeam){ $('j-msg').textContent = 'בחרו צד: תלמידים או הורים 🙂'; return; }
   $('j-msg').textContent = 'מתחברים...'; $('j-msg').style.color = 'var(--ink-dim)';
   role = 'player';
-  connect(code, () => {
+  connectPlayer(code, () => {
     send({ t:'join', id:myId, name:myName, team:myTeam });
     let tries = 0;
     const iv = setInterval(() => {
