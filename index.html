@@ -414,11 +414,20 @@ input[type=text]:focus{border-color:var(--gold);}
   <p style="font-size:18px; max-width:420px;">תודה ששיחקתם, ומזל טוב לבוגרים! 🎉</p>
 </div>
 
-<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script>
-if (typeof mqtt === 'undefined') {
-  document.write('<script src="https:\/\/cdn.jsdelivr.net\/npm\/mqtt@5.10.1\/dist\/mqtt.min.js"><\/script>');
-}
+const firebaseConfig = {
+  apiKey: "AIzaSyCg2Ajg3U45xUhIkPdV0x8qlNaxGsvnxUI",
+  authDomain: "siyum-a0a07.firebaseapp.com",
+  databaseURL: "https://siyum-a0a07-default-rtdb.firebaseio.com",
+  projectId: "siyum-a0a07",
+  storageBucket: "siyum-a0a07.firebasestorage.app",
+  messagingSenderId: "774333568563",
+  appId: "1:774333568563:web:b555f5285894f788227546"
+};
+firebase.initializeApp(firebaseConfig);
+const fdb = firebase.database();
 </script>
 <script>
 /* ============================================================
@@ -501,84 +510,71 @@ const VOTES = [
 /* תמונות הווי: לוחצים על כפתור "📷 תמונות" במסך ההמתנה ובוחרים מהמחשב. זהו. */
 
 /* ============================================================
-   תקשורת (MQTT דרך ברוקר ציבורי חינמי), אין צורך לגעת
+   תקשורת דרך Firebase Realtime Database (HTTPS, עובר חומות אש)
    ============================================================ */
-const BROKERS = ["wss://broker.emqx.io:8084/mqtt", "wss://test.mosquitto.org:8081/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
-const NS = "yk-siyum-2026";
-let client = null, topic = null, myId = Math.random().toString(36).slice(2,10);
-let role = null, chosenBroker = 0;
+let topic = null, myId = Math.random().toString(36).slice(2,10);
+let role = null;
+let msgRef = null;          // ההפניה לרשימת ההודעות של החדר
+let connWatch = null;
 
 function setConn(on){
   document.getElementById('conn-dot').classList.toggle('on', on);
   document.getElementById('conn-txt').textContent = on ? 'מחובר' : 'לא מחובר';
 }
 
-// קוד החדר = ספרת שרת (אינדקס ב-BROKERS) + 3 ספרות אקראיות. כך התלמיד יודע לאיזה שרת להתחבר.
-function makeRoomCode(brokerIndex){
-  return String(brokerIndex) + String(Math.floor(100 + Math.random()*900));
-}
-function brokerFromCode(code){
-  const idx = parseInt(code[0], 10);
-  return (idx >= 0 && idx < BROKERS.length) ? idx : 0;
+function makeRoomCode(){
+  return String(Math.floor(1000 + Math.random()*9000));
 }
 
-// מצב מורה: מנסה את כל השרתים במקביל, מתחבר לראשון שעונה, ומחזיר את האינדקס שלו
-function connectHost(onReady){
-  let settled = false;
-  const candidates = [];
-  function cleanupLosers(winner){ candidates.forEach(c => { if (c !== winner){ try{ c.end(true); }catch(e){} } }); }
-
-  BROKERS.forEach((url, idx) => {
-    let c;
-    try { c = mqtt.connect(url, { clientId:'h_'+myId+'_'+Math.random().toString(36).slice(2,6), clean:true, connectTimeout:20000, reconnectPeriod:3000, keepalive:30 }); }
-    catch(e){ return; }
-    candidates.push(c);
-    c.on('connect', () => {
-      if (!settled){
-        settled = true;
-        client = c;
-        chosenBroker = idx;
-        cleanupLosers(c);
-        const room = makeRoomCode(idx);
-        topic = NS + "/" + room;
-        c.subscribe(topic, {qos:1}, () => { setConn(true); onReady(room); });
-        attachMessageHandler(c);
-      } else if (c === client){ setConn(true); }
-    });
-    c.on('close', () => { if (c === client) setConn(false); });
-    c.on('error', () => {});
-  });
-
-  setTimeout(() => { if (!settled){ alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו רשת אחרת.'); } }, 22000);
+// מאזין לסטטוס החיבור של Firebase ומעדכן את הנקודה
+function watchConnection(){
+  if (connWatch) return;
+  connWatch = fdb.ref('.info/connected');
+  connWatch.on('value', (snap) => { setConn(snap.val() === true); });
 }
 
-// מצב תלמיד/הורה: מתחבר רק לשרת שהמורה בחר (לפי הספרה הראשונה בקוד)
-function connectPlayer(code, onReady){
-  const idx = brokerFromCode(code);
-  topic = NS + "/" + code;
-  let settled = false;
-  const c = mqtt.connect(BROKERS[idx], { clientId:'p_'+myId+'_'+Math.random().toString(36).slice(2,6), clean:true, connectTimeout:20000, reconnectPeriod:3000, keepalive:30 });
-  c.on('connect', () => {
-    if (!settled){ settled = true; client = c; c.subscribe(topic, {qos:1}, () => { setConn(true); onReady(); }); attachMessageHandler(c); }
-    else setConn(true);
-  });
-  c.on('close', () => setConn(false));
-  c.on('error', () => {});
-  setTimeout(() => { if (!settled){ alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו שוב.'); } }, 22000);
-}
-
-function attachMessageHandler(c){
-  c.on('message', (t, payload) => {
-    let m; try{ m = JSON.parse(payload.toString()); }catch(e){ return; }
+// מתחיל להאזין להודעות בחדר נתון
+function listenRoom(code, onReady){
+  topic = code;
+  msgRef = fdb.ref('rooms/' + code + '/messages');
+  watchConnection();
+  let ready = false;
+  // מאזינים רק להודעות האחרונות, כדי לא לטעון את כל ההיסטוריה מחדש
+  msgRef.limitToLast(60).on('child_added', (snap) => {
+    const m = snap.val();
+    if (!m) return;
     if (m.from === myId) return;
     if (role === 'host') hostOnMessage(m);
     else playerOnMessage(m);
   });
+  fdb.ref('.info/connected').once('value').then(() => { if (onReady && !ready){ ready = true; onReady(); } })
+     .catch(() => { if (onReady && !ready){ ready = true; onReady(); } });
+  setTimeout(() => { if (onReady && !ready){ ready = true; onReady(); } }, 8000);
+}
+
+// מצב מורה: מנקה חדר ישן, יוצר קוד חדש ומתחיל להאזין
+function connectHost(onReady){
+  const room = makeRoomCode();
+  // מחיקת נתונים ישנים מאותו קוד (אם יש), כדי שלא יוצגו תשובות מאירוע קודם
+  fdb.ref('rooms/' + room).remove().catch(()=>{}).finally(() => {
+    listenRoom(room, () => { setConn(true); onReady(room); });
+  });
+  setTimeout(() => {
+    fdb.ref('.info/connected').once('value').then(s => {
+      if (s.val() !== true) alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו שוב.');
+    });
+  }, 12000);
+}
+
+// מצב תלמיד/הורה: מתחבר לחדר לפי הקוד
+function connectPlayer(code, onReady){
+  listenRoom(code, () => { setConn(true); onReady(); });
 }
 
 function send(obj){
   obj.from = myId;
-  if (client) client.publish(topic, JSON.stringify(obj), {qos:1});
+  obj.ts = Date.now();
+  if (msgRef) msgRef.push(obj);
 }
 
 function show(id){
