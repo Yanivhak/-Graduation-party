@@ -87,7 +87,8 @@ input[type=text]:focus{border-color:var(--gold);}
 /* ---------- host question ---------- */
 .qhead{display:flex; align-items:center; gap:18px; width:100%; max-width:980px; justify-content:space-between;}
 .qnum{font-size:18px; color:var(--ink-dim); font-weight:700;}
-.dbl{background:var(--coral); color:#fff; font-weight:900; border-radius:10px; padding:4px 12px; font-size:16px;}
+.dbl{background:var(--coral); color:#fff; font-weight:900; border-radius:14px; padding:10px 26px; font-size:clamp(20px,3vw,30px); box-shadow:0 0 24px rgba(255,107,107,.55); animation:dblpulse 1s infinite alternate;}
+@keyframes dblpulse{from{transform:scale(1);} to{transform:scale(1.06);}}
 .timerball{
   width:74px; height:74px; border-radius:50%; background:var(--card);
   display:flex; align-items:center; justify-content:center;
@@ -146,7 +147,7 @@ input[type=text]:focus{border-color:var(--gold);}
 #pred .pred-text{font-size:clamp(22px,3.4vw,32px); line-height:1.55; max-width:860px; margin:0 0 34px;}
 
 /* ---------- vote ---------- */
-.vote-tag{background:var(--violet); color:#fff; font-weight:900; border-radius:10px; padding:4px 14px; font-size:16px;}
+.vote-tag{background:var(--violet); color:#fff; font-weight:900; border-radius:14px; padding:10px 24px; font-size:clamp(18px,2.6vw,26px); box-shadow:0 0 22px rgba(141,141,242,.5);}
 .winner-name{font-family:'Secular One'; font-size:clamp(44px,8vw,80px); color:var(--gold); margin:6px 0 8px; text-shadow:0 4px 0 rgba(0,0,0,.3); animation:pop .5s ease;}
 .punch{font-size:clamp(20px,3vw,28px); line-height:1.5; max-width:760px; margin:0 0 26px;}
 
@@ -204,6 +205,9 @@ input[type=text]:focus{border-color:var(--gold);}
 .moncap{position:fixed; bottom:42px; left:0; right:0; text-align:center; z-index:4; font-family:'Secular One'; font-size:clamp(26px,4vw,44px); color:var(--gold); text-shadow:0 2px 12px rgba(0,0,0,.8);}
 #mon-progress{position:fixed; bottom:0; left:0; right:0; height:14px; background:rgba(0,0,0,.55); z-index:5; box-shadow:0 -2px 10px rgba(0,0,0,.6);}
 #mon-progress i{display:block; height:100%; width:0; background:linear-gradient(90deg, var(--gold), #ffe9a8); transition:width .5s linear; box-shadow:0 0 12px var(--gold);}
+#mon-controls{position:fixed; top:16px; right:16px; z-index:6; display:flex; gap:8px;}
+#mon-controls button{font-family:'Heebo'; font-size:15px; font-weight:700; color:var(--ink); background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.3); border-radius:10px; padding:9px 16px; cursor:pointer;}
+#mon-controls button:active{transform:translateY(1px);}
 
 /* ---------- זיקוקים ---------- */
 #fw{position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; pointer-events:none;}
@@ -361,6 +365,10 @@ input[type=text]:focus{border-color:var(--gold);}
   <div class="monwrap" id="monwrap"></div>
   <div class="moncap">שלוש שנים ביחד 🎓</div>
   <div id="mon-progress"><i id="mon-progress-fill"></i></div>
+  <div id="mon-controls">
+    <button onclick="montageTogglePause()" id="mon-pause">⏸️ עצור</button>
+    <button onclick="montageFinish()">✖️ סיום</button>
+  </div>
 </div>
 
 <!-- ===================== PLAYER: JOIN ===================== -->
@@ -493,7 +501,7 @@ const QUESTIONS = [
 /* תחזיות 2036, אחת לכל בוגר. מופיעות על הלוח בין שאלות. */
 const PREDICTIONS = [
   { name: "עמית", text: "שנת 2036: עמית זוכה באליפות העולם בטאקי. את הפרס, הטלפון החדש בשוק, הוא מחזיק בכיס עוד לפני שהגיע לחנויות." },
-  { name: "מקס",  text: "שנת 2036: התערוכה החדשה של מקס נפתחת בפריז. בכניסה מגישים קפה מוקה ושוקו. הפתיחה מתעכבת קצת: ״רגע, שניה, תיכף, עוד מעט״." },
+  { name: "מקס",  text: "שנת 2036: התערוכה החדשה של מקס נפתחת בפריז. התור להיכנס משתרך לאורך כל הרחוב, ובכניסה מגישים לכולם קפה מוקה ושוקו." },
   { name: "רועי", text: "שנת 2036: ד״ר רועי, ההיסטוריון הכי מבוקש בטלוויזיה, מסביר באולפן מה הפוליטיקאים היו צריכים ללמוד מההיסטוריה." },
   { name: "בן",   text: "שנת 2036: בן זוכה בטורניר גיימינג בינלאומי, וחוגג כמו תמיד: חצילים בארוחת בוקר." },
   { name: "גלעד", text: "שנת 2036: נער הפלא מנהל את רשת המשקאות ״אליעזר״ עם שמונה סניפים, ובכל סניף פינת דרגון בול לזכר הימים ההם." },
@@ -1287,6 +1295,29 @@ function startMontage(){
   step();
   clearInterval(monIv);
   monIv = setInterval(step, SLIDE_MS);
+  montagePaused = false;
+  $('mon-pause').textContent = '⏸️ עצור';
+  montageStep = step;
+  montageInterval = SLIDE_MS;
+}
+
+let montagePaused = false, montageStep = null, montageInterval = 4500;
+function montageTogglePause(){
+  montagePaused = !montagePaused;
+  if (montagePaused){
+    clearInterval(monIv);
+    if (montageAudio){ try{ montageAudio.pause(); }catch(e){} }
+    $('mon-pause').textContent = '▶️ המשך';
+  } else {
+    if (montageStep) monIv = setInterval(montageStep, montageInterval);
+    if (montageAudio){ montageAudio.play().catch(()=>{}); }
+    $('mon-pause').textContent = '⏸️ עצור';
+  }
+}
+function montageFinish(){
+  clearInterval(monIv);
+  if (montageAudio){ try{ montageAudio.pause(); }catch(e){} }
+  show('hp'); // חזרה למסך הפודיום
 }
 
 /* ============================================================
@@ -1341,9 +1372,17 @@ function playerOnMessage(m){
 function showPlayerRound(m, isVote){
   curQ = m; picks = new Set(); sentThisQ = false; qShownAt = Date.now();
   $('pq-text').textContent = (isVote ? '🎭 ' : '') + m.text;
-  $('pq-hint').textContent = isVote
-    ? 'רק בכיף! זו לא שאלה אמיתית, פשוט הצבעה מצחיקה בלי נקודות 😄'
-    : (m.multi ? 'יש כאן יותר מתשובה אחת, סמנו את כולן ולחצו שליחה' : 'לחיצה אחת = תשובה. מהירות שווה נקודות!') + (m.double ? ' ✨ שאלה כפולה!' : '');
+  const hint = $('pq-hint');
+  if (isVote){
+    hint.textContent = '🎭 רק בכיף! זו לא שאלה אמיתית, פשוט הצבעה מצחיקה בלי נקודות 😄';
+    hint.style.cssText = 'font-size:16px; color:#fff; font-weight:700; margin:0 0 14px; background:var(--violet); border-radius:12px; padding:10px 14px;';
+  } else if (m.double){
+    hint.textContent = '✨ שאלה כפולה! שווה פי 2 נקודות ✨';
+    hint.style.cssText = 'font-size:16px; color:#fff; font-weight:700; margin:0 0 14px; background:var(--coral); border-radius:12px; padding:10px 14px;';
+  } else {
+    hint.textContent = m.multi ? 'יש כאן יותר מתשובה אחת, סמנו את כולן ולחצו שליחה' : 'לחיצה אחת = תשובה. מהירות שווה נקודות!';
+    hint.style.cssText = 'font-size:14px; color:var(--gold); font-weight:700; margin:0 0 14px;';
+  }
   const opts = isVote ? m.options : m.people;
   const grid = $('pq-grid'); grid.innerHTML = '';
   opts.forEach(n => {
