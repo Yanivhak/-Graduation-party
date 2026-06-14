@@ -202,6 +202,8 @@ input[type=text]:focus{border-color:var(--gold);}
 .monwrap img{position:absolute; inset:0; width:100%; height:100%; object-fit:contain; opacity:0; transition:opacity 1.8s ease;}
 .monwrap img.vis{opacity:1;}
 .moncap{position:fixed; bottom:34px; left:0; right:0; text-align:center; z-index:4; font-family:'Secular One'; font-size:clamp(26px,4vw,44px); color:var(--gold); text-shadow:0 2px 12px rgba(0,0,0,.8);}
+#mon-progress{position:fixed; bottom:0; left:0; right:0; height:6px; background:rgba(255,255,255,.15); z-index:5;}
+#mon-progress i{display:block; height:100%; width:0; background:var(--gold); transition:width .5s linear;}
 
 /* ---------- זיקוקים ---------- */
 #fw{position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; pointer-events:none;}
@@ -358,6 +360,7 @@ input[type=text]:focus{border-color:var(--gold);}
 <div class="screen" id="montage">
   <div class="monwrap" id="monwrap"></div>
   <div class="moncap">שלוש שנים ביחד 🎓</div>
+  <div id="mon-progress"><i id="mon-progress-fill"></i></div>
 </div>
 
 <!-- ===================== PLAYER: JOIN ===================== -->
@@ -1242,22 +1245,47 @@ let monIv = null;
 function startMontage(){
   $('host-controls').classList.remove('on');
   stopGameMusic();
+  stopLobbyBg();
   show('montage');
   playIdx = 0;
   playPlaylist();
+
   const wrap = $('monwrap');
   wrap.innerHTML = '';
   const a = document.createElement('img'), b = document.createElement('img');
   wrap.appendChild(a); wrap.appendChild(b);
+
+  // ערבוב חד-פעמי של כל התמונות, כדי לעבור על כולן בדיוק פעם אחת בלי כפילויות
+  const order = havai.slice();
+  for (let i = order.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+
+  const SLIDE_MS = 4500;
   let idx = 0, flip = false;
+  const fill = $('mon-progress-fill');
+
   function step(){
+    if (idx >= order.length){
+      // עברנו על כל התמונות: מתחילים סבב חדש (לולאה) או אפשר לעצור
+      idx = 0;
+      // ערבוב מחדש לסבב הבא כדי שלא יחזור אותו רצף
+      for (let i = order.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+    }
     const cur = flip ? b : a, prev = flip ? a : b;
-    cur.src = havai[idx % havai.length]; idx++;
+    cur.src = order[idx];
     cur.classList.add('vis'); prev.classList.remove('vis');
     flip = !flip;
+    idx++;
+    fill.style.width = Math.round((idx / order.length) * 100) + '%';
   }
   step();
-  monIv = setInterval(step, 4500);
+  clearInterval(monIv);
+  monIv = setInterval(step, SLIDE_MS);
 }
 
 /* ============================================================
