@@ -500,7 +500,7 @@ const VOTES = [
 /* ============================================================
    תקשורת (MQTT דרך ברוקר ציבורי חינמי), אין צורך לגעת
    ============================================================ */
-const BROKERS = ["wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
+const BROKERS = ["wss://test.mosquitto.org:8081/mqtt", "wss://broker.emqx.io:8084/mqtt", "wss://broker.hivemq.com:8884/mqtt"];
 const NS = "yk-siyum-2026";
 let client = null, topic = null, myId = Math.random().toString(36).slice(2,10);
 let role = null;
@@ -512,28 +512,45 @@ function setConn(on){
 
 function connect(room, onReady){
   topic = NS + "/" + room;
-  let i = 0;
-  function tryBroker(){
-    if (i >= BROKERS.length){ alert('לא הצלחנו להתחבר לשרת המשחק. בדקו חיבור לאינטרנט ונסו שוב.'); return; }
-    const url = BROKERS[i++];
-    const c = mqtt.connect(url, { clientId: 'c_'+myId+'_'+Math.random().toString(36).slice(2,6), clean: true, connectTimeout: 6000, reconnectPeriod: 2000 });
-    let opened = false;
+  let settled = false;
+  const candidates = [];
+
+  function cleanupLosers(winner){
+    candidates.forEach(c => { if (c !== winner){ try{ c.end(true); }catch(e){} } });
+  }
+
+  BROKERS.forEach(url => {
+    let c;
+    try {
+      c = mqtt.connect(url, { clientId: 'c_'+myId+'_'+Math.random().toString(36).slice(2,6), clean: true, connectTimeout: 20000, reconnectPeriod: 3000, keepalive: 30 });
+    } catch(e){ return; }
+    candidates.push(c);
     c.on('connect', () => {
-      if (!opened){
-        opened = true; client = c;
-        c.subscribe(topic, {qos:1}, () => { setConn(true); onReady && onReady(); onReady = null; });
-      } else { setConn(true); }
+      if (!settled){
+        settled = true;
+        client = c;
+        cleanupLosers(c);
+        c.subscribe(topic, {qos:1}, () => { setConn(true); if (onReady){ onReady(); onReady = null; } });
+      } else if (c === client){
+        setConn(true);
+      }
     });
-    c.on('close', () => setConn(false));
-    c.on('error', () => { if(!opened){ c.end(true); tryBroker(); } });
+    c.on('close', () => { if (c === client) setConn(false); });
+    c.on('error', () => {});
     c.on('message', (t, payload) => {
       let m; try{ m = JSON.parse(payload.toString()); }catch(e){ return; }
       if (m.from === myId) return;
       if (role === 'host') hostOnMessage(m);
       else playerOnMessage(m);
     });
-  }
-  tryBroker();
+  });
+
+  // אם אחרי 22 שניות אף שרת לא ענה, מודיעים
+  setTimeout(() => {
+    if (!settled){
+      alert('לא הצלחנו להתחבר לשרת המשחק. בדקו את חיבור האינטרנט ונסו שוב, או נסו רשת אחרת.');
+    }
+  }, 22000);
 }
 
 function send(obj){
@@ -669,22 +686,22 @@ let curVoteOptions = [];
 function startHost(){
   role = 'host';
   const room = String(Math.floor(1000 + Math.random()*9000));
-  connect(room, () => {
-    $('room-code').textContent = room;
-    const url = location.origin.startsWith('http')
-      ? location.origin + location.pathname + '?room=' + room
-      : '';
-    if (url){
-      joinLink = url;
-      $('qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=2&data=' + encodeURIComponent(url);
-      $('join-url').textContent = url.replace(/^https?:\/\//,'');
-      $('copy-link').style.display = '';
-    } else {
-      document.querySelector('.qrbox').style.display = 'none';
-      $('join-url').textContent = 'פתחו את הקובץ במכשיר אחר והקלידו את הקוד';
-    }
-    show('lobby');
-  });
+  // מציגים את הלובי מיד, בלי לחכות לשרת
+  $('room-code').textContent = room;
+  const url = location.origin.startsWith('http')
+    ? location.origin + location.pathname + '?room=' + room
+    : '';
+  if (url){
+    joinLink = url;
+    $('qr').src = 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=2&data=' + encodeURIComponent(url);
+    $('join-url').textContent = url.replace(/^https?:\/\//,'');
+    $('copy-link').style.display = '';
+  } else {
+    document.querySelector('.qrbox').style.display = 'none';
+    $('join-url').textContent = 'פתחו את הקובץ במכשיר אחר והקלידו את הקוד';
+  }
+  show('lobby');
+  connect(room);
   window.onbeforeunload = () => 'המשחק פעיל, רענון ינתק את כולם.';
 }
 
