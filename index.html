@@ -228,6 +228,7 @@ input[type=text]:focus{border-color:var(--gold);}
 <div id="glow"></div>
 <div id="host-controls">
   <button onclick="hostSkip()" title="חשיפה / השאלה הבאה">⏭️ הבא</button>
+  <button onclick="hostToggleMusic()" id="music-toggle" title="עצירת/הפעלת מוזיקת רקע">🔊 מוזיקה</button>
   <button onclick="hostJumpSummary()" title="קפיצה לסיכום">📊 סיכום</button>
   <button onclick="hostJumpMontage()" title="קפיצה למונטאז'">🎞️ תמונות</button>
 </div>
@@ -811,6 +812,17 @@ function hostJumpMontage(){
   if (havai.length){ startMontage(); }
   else { alert('עוד לא נטענו תמונות. אפשר לטעון אותן בכפתור 📷 במסך ההמתנה.'); }
 }
+let gameMusicMuted = false;
+function hostToggleMusic(){
+  gameMusicMuted = !gameMusicMuted;
+  if (gameMusicMuted){
+    stopGameMusic();
+    $('music-toggle').textContent = '🔇 מוזיקה';
+  } else {
+    gameMusicResume();
+    $('music-toggle').textContent = '🔊 מוזיקה';
+  }
+}
 
 function nextItem(){
   itemIndex++;
@@ -1210,12 +1222,17 @@ function renderGameMusicList(){
   $('gamemusic-btn').textContent = gamePlaylist.length ? '🎵 הוספת שיר רקע' : '🎵 מוזיקת רקע למשחק';
 }
 function playGameMusic(){
-  if (!gamePlaylist.length) return;
+  if (!gamePlaylist.length || gameMusicMuted) return;
   if (gameAudio){ gameAudio.pause(); }
   gameAudio = new Audio(gamePlaylist[gamePlayIdx % gamePlaylist.length].url);
   gameAudio.volume = 0.18; // עוצמה נמוכה כדי לא להפריע
   gameAudio.onended = () => { gamePlayIdx++; playGameMusic(); };
   gameAudio.play().catch(()=>{});
+}
+function gameMusicResume(){
+  // ממשיך לנגן; אם כבר יש שיר טעון מנגן אותו, אחרת מתחיל מחדש
+  if (gameAudio && gameAudio.paused){ gameAudio.play().catch(()=>{}); }
+  else { playGameMusic(); }
 }
 function stopGameMusic(){
   if (gameAudio){ try{ gameAudio.pause(); }catch(e){} }
